@@ -16,6 +16,7 @@
     "@angular/platform-browser-dynamic": "~18.0.0",
     "@angular/router": "~18.0.0",
     "@ngrx/effects": "^18.0.1",
+    "@ngrx/signals": "^17.2.0",
     "@ngrx/store": "^18.0.1",
     "@nx/angular": "19.3.2",
     "primeng": "^17.18.2",
