@@ -1,4 +1,5 @@
 import { Directive, ElementRef, HostListener, AfterViewInit, Renderer2, OnDestroy } from '@angular/core';
+import { debounceTime, Subject, takeUntil } from 'rxjs';
 
 @Directive({
   selector: '[libTooltip]',
@@ -6,34 +7,37 @@ import { Directive, ElementRef, HostListener, AfterViewInit, Renderer2, OnDestro
 export class SmartTooltipDirective implements AfterViewInit, OnDestroy {
   tooltipContainer: HTMLElement | null = null;
   resizeObserver: ResizeObserver;
-
+  private resize$: Subject<Array<ResizeObserverEntry>> = new Subject<Array<ResizeObserverEntry>>();
+  private unsubscribe$: Subject<boolean> = new Subject<boolean>();
 
   constructor(private elementRef: ElementRef, private renderer: Renderer2) {
-    this.resizeObserver = new ResizeObserver(() => {
-      this.createTooltip();
-    });
+    this.resizeObserver = new ResizeObserver(entries => this.resize$.next(entries));
   }
-  
 
   ngAfterViewInit(): void {
-    this.applyEllipsisStyle();
     this.resizeObserver.observe(this.elementRef.nativeElement);
+    this.resize$
+      .pipe(
+        debounceTime(300),
+        takeUntil(this.unsubscribe$)
+      )
+      .subscribe(() => this.createTooltip());
+    this.applyEllipsisStyle();
   }
 
   ngOnDestroy(): void {
     this.resizeObserver.disconnect();
+    this.unsubscribe$.complete();
     this.destroyTooltip();
   }
-
 
   @HostListener('mouseover')
   onMouseOver(): void {
     if (this.tooltipContainer) {
-      this.renderer.setStyle(this.tooltipContainer, 'display', 'inherit');
-      this.updateTooltipPositionAndArrow();
+      this.renderer.setStyle(this.tooltipContainer, 'display', 'block');
+      this.updateTooltipPosition();
     }
   }
-
 
   @HostListener('mouseout')
   onMouseOut(): void {
@@ -52,94 +56,56 @@ export class SmartTooltipDirective implements AfterViewInit, OnDestroy {
   private isOverflowing(element: HTMLElement): boolean {
     return element.scrollWidth > element.clientWidth;
   }
-  
+
   private createTooltip(): void {
     const element = this.elementRef.nativeElement;
-    const tooltipHTML = element.innerHTML.trim() || '';
-  
+    const tooltipText = element.innerText.trim() || '';
+
     if (this.isOverflowing(element)) {
       if (!this.tooltipContainer) {
         this.tooltipContainer = this.renderer.createElement('div');
-        if(this.tooltipContainer){
-        this.tooltipContainer.innerHTML = tooltipHTML;
-        this.applyStyle();
-        this.renderer.appendChild(this.elementRef.nativeElement, this.tooltipContainer);
+        if (this.tooltipContainer) {
+          this.tooltipContainer.innerHTML = tooltipText;
+          this.applyStyle();
+          this.renderer.appendChild(document.body, this.tooltipContainer);
         }
       }
-      this.updateTooltipPositionAndArrow();
+      this.updateTooltipPosition();
     } else {
       this.destroyTooltip();
     }
   }
-  
 
   private applyStyle() {
     if (!this.tooltipContainer) return;
-    this.renderer.setStyle(this.tooltipContainer, 'display', 'none');
+    this.renderer.setStyle(this.tooltipContainer, 'position', 'absolute');
+    this.renderer.setStyle(this.tooltipContainer, 'z-index', '1000');
     this.renderer.setStyle(this.tooltipContainer, 'background-color', '#333');
     this.renderer.setStyle(this.tooltipContainer, 'color', '#fff');
     this.renderer.setStyle(this.tooltipContainer, 'padding', '5px');
     this.renderer.setStyle(this.tooltipContainer, 'border-radius', '5px');
-    this.renderer.setStyle(this.tooltipContainer, 'box-shadow', '0 0 10px rgba(0, 0, 0, 0.3)');
-    this.renderer.setStyle(this.tooltipContainer, 'position', 'absolute');
-    this.renderer.setStyle(this.tooltipContainer, 'z-index', '1000');
+    this.renderer.setStyle(this.tooltipContainer, 'box-shadow', '0 2px 4px rgba(0,0,0,0.2)');
+    this.renderer.setStyle(this.tooltipContainer, 'display', 'none');
+    this.renderer.setStyle(this.tooltipContainer, 'pointer-events', 'none'); // Prevents tooltip from blocking mouse events
   }
 
-  private calculateTooltipPosition() {
-    const elementRect = this.elementRef.nativeElement.getBoundingClientRect();
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-  
-    // Default position
-    let position = 'top';
-  
-    // Check available space and update position accordingly
-    if (elementRect.top < 100) {
-      position = 'bottom';
-    } else if (viewportHeight - elementRect.bottom < 100) {
-      position = 'top';
-    } else if (elementRect.left < 100) {
-      position = 'right';
-    } else if (viewportWidth - elementRect.right < 100) {
-      position = 'left';
-    }
-  
-    return position;
-  }
-
-  private updateTooltipPositionAndArrow() {
+  private updateTooltipPosition() {
     if (this.tooltipContainer) {
-      const position = this.calculateTooltipPosition();
-  
-      this.renderer.removeClass(this.tooltipContainer, 'tooltip-top');
-      this.renderer.removeClass(this.tooltipContainer, 'tooltip-bottom');
-      this.renderer.removeClass(this.tooltipContainer, 'tooltip-left');
-      this.renderer.removeClass(this.tooltipContainer, 'tooltip-right');
-  
-      this.renderer.addClass(this.tooltipContainer, `tooltip-${position}`);
-  
-      switch (position) {
-        case 'top':
-          this.renderer.setStyle(this.tooltipContainer, 'top', `${this.elementRef.nativeElement.offsetTop - this.tooltipContainer.offsetHeight}px`);
-          break;
-        case 'bottom':
-          this.renderer.setStyle(this.tooltipContainer, 'top', `${this.elementRef.nativeElement.offsetTop + this.elementRef.nativeElement.offsetHeight}px`);
-          break;
-        case 'left':
-          this.renderer.setStyle(this.tooltipContainer, 'left', `${this.elementRef.nativeElement.offsetLeft - this.tooltipContainer.offsetWidth}px`);
-          break;
-        case 'right':
-          this.renderer.setStyle(this.tooltipContainer, 'left', `${this.elementRef.nativeElement.offsetLeft + this.elementRef.nativeElement.offsetWidth}px`);
-          break;
-      }
+      const elementRect = this.elementRef.nativeElement.getBoundingClientRect();
+      const tooltipRect = this.tooltipContainer.getBoundingClientRect();
+      const offsetTop = elementRect.top + window.scrollY;
+      const offsetLeft = elementRect.left + window.scrollX;
+      const top = offsetTop - tooltipRect.height - 5; // Adjusted position above the element with a gap
+      const left = offsetLeft + (elementRect.width / 2) - (tooltipRect.width / 2);
+      this.renderer.setStyle(this.tooltipContainer, 'top', `${top}px`);
+      this.renderer.setStyle(this.tooltipContainer, 'left', `${left}px`);
     }
   }
-  
+
   private destroyTooltip(): void {
     if (this.tooltipContainer) {
-      this.renderer.removeChild(this.elementRef.nativeElement, this.tooltipContainer);
+      this.renderer.removeChild(document.body, this.tooltipContainer);
       this.tooltipContainer = null;
     }
   }
-
 }

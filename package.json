@@ -2,7 +2,12 @@
   "name": "@angular-monorepo/source",
   "version": "0.0.0",
   "license": "MIT",
-  "scripts": {},
+  "scripts": {
+    "start": "nx run angular-monorepo:serve",
+    "build": "nx run angular-monorepo:build:production",
+    "start:local": "nx run angular-monorepo:serve:development",
+    "start:all": "npx nx run-many --target=serve --all=true "
+  },
   "private": true,
   "dependencies": {
     "@angular/animations": "~18.0.0",
