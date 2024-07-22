@@ -86,7 +86,6 @@ export class SmartTooltipDirective implements AfterViewInit, OnDestroy {
     this.renderer.setStyle(this.tooltipContainer, 'border-radius', '5px');
     this.renderer.setStyle(this.tooltipContainer, 'box-shadow', '0 2px 4px rgba(0,0,0,0.2)');
     this.renderer.setStyle(this.tooltipContainer, 'display', 'none');
-    this.renderer.setStyle(this.tooltipContainer, 'pointer-events', 'none'); // Prevents tooltip from blocking mouse events
   }
 
   private updateTooltipPosition() {
@@ -95,7 +94,7 @@ export class SmartTooltipDirective implements AfterViewInit, OnDestroy {
       const tooltipRect = this.tooltipContainer.getBoundingClientRect();
       const offsetTop = elementRect.top + window.scrollY;
       const offsetLeft = elementRect.left + window.scrollX;
-      const top = offsetTop - tooltipRect.height - 5; // Adjusted position above the element with a gap
+      const top = offsetTop - tooltipRect.height - 1;
       const left = offsetLeft + (elementRect.width / 2) - (tooltipRect.width / 2);
       this.renderer.setStyle(this.tooltipContainer, 'top', `${top}px`);
       this.renderer.setStyle(this.tooltipContainer, 'left', `${left}px`);
